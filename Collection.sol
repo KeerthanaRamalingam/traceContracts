@@ -1702,6 +1702,10 @@ contract ERC721Upgradeable is
         _supply = supply_;
     }
 
+    function _updateSupply(uint256 supply_) public {
+        _supply = supply_;
+    }
+
     function __ERC721_init_unchained(string memory name_, string memory symbol_)
         internal
         initializer
@@ -3381,13 +3385,18 @@ contract Bling_Collection is
         uint256 supply,
         address collectionCreator
     ) public initializer {
-        require(msg.sender == blingMaster, "address is not of blingMaster");
+        require(msg.sender == blingMaster, "Not Authorized");
         HasSecondarySaleFees._initializeHasSecondarySaleFees(); // Leave
         NFT721Creator._initializeNFT721Creator(); // leave
         NFT721Mint._initializeNFT721Mint();
         NFT721Mint.initializeCreator(collectionCreator);
         FoundationTreasuryNode._initializeFoundationTreasuryNode(treasury);
         ERC721Upgradeable.__ERC721_init(name, symbol, supply);
+    }
+
+    function masterUpdateSupply(uint256 _supply) public {
+        require(msg.sender == blingMaster, "Not Authorized");
+        ERC721Upgradeable._updateSupply(_supply);
     }
 
     /**

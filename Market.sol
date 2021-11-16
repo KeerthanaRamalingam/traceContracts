@@ -1,6 +1,6 @@
 /**
  *Submitted for verification at polygonscan.com on 2021-10-22
-*/
+ */
 
 // Sources flattened with hardhat v2.4.1 https://hardhat.org
 
@@ -1467,8 +1467,7 @@ library Address {
         // for accounts without code, i.e. `keccak256('')`
         bytes32 codehash;
 
-            bytes32 accountHash
-         = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+        bytes32 accountHash = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
         // solhint-disable-next-line no-inline-assembly
         assembly {
             codehash := extcodehash(account)
@@ -1648,7 +1647,7 @@ library Strings {
         uint256 index = digits - 1;
         temp = value;
         while (temp != 0) {
-            buffer[index--] = byte(uint8(48 + (temp % 10)));
+            buffer[index--] = bytes1(uint8(48 + (temp % 10)));
             temp /= 10;
         }
         return string(buffer);
@@ -1812,7 +1811,7 @@ abstract contract NFTMarketReserveAuction is
 
     // These variables were used in an older version of the contract, left here as gaps to ensure upgrade compatibility
     uint256 private ______gap_was_goLiveDate;
-    
+
     uint256 private EXTENSION_DURATION = 1 days;
 
     event ReserveAuctionConfigUpdated(
@@ -1903,8 +1902,7 @@ abstract contract NFTMarketReserveAuction is
     {
         address payable seller = auctionIdToAuction[
             nftContractToTokenIdToAuctionId[nftContract][tokenId]
-        ]
-        .seller;
+        ].seller;
         if (seller == address(0)) {
             return super._getSellerFor(nftContract, tokenId);
         }
@@ -1962,8 +1960,11 @@ abstract contract NFTMarketReserveAuction is
     ) public onlyValidAuctionConfig(reservePrice) nonReentrant {
         // If an auction is already in progress then the NFT would be in escrow and the modifier would have failed
         uint256 extraTimeForExecution = 10 minutes;
-        require(startDate + extraTimeForExecution > block.timestamp && endDate > startDate + EXTENSION_DURATION, 
-                                            "NFTMarketReserveAuction: endDate must be > stateDate + 24 hours ");
+        require(
+            startDate + extraTimeForExecution > block.timestamp &&
+                endDate > startDate + EXTENSION_DURATION,
+            "NFTMarketReserveAuction: endDate must be > stateDate + 24 hours "
+        );
         uint256 auctionId = _getNextAndIncrementAuctionId();
         nftContractToTokenIdToAuctionId[nftContract][tokenId] = auctionId;
         auctionIdToAuction[auctionId] = ReserveAuction(
@@ -2056,7 +2057,8 @@ abstract contract NFTMarketReserveAuction is
             "NFTMarketReserveAuction: Auction not found"
         );
         require(
-            auction.startTime <= block.timestamp && auction.endTime >= block.timestamp,
+            auction.startTime <= block.timestamp &&
+                auction.endTime >= block.timestamp,
             "NFTMarketReserveAuction: Auction not found"
         );
 
@@ -2064,28 +2066,25 @@ abstract contract NFTMarketReserveAuction is
         //     auction.bidder != msg.sender,
         //     "NFTMarketReserveAuction: You already have an outstanding bid"
         // );
-        uint256 minAmount = _getMinBidAmountForReserveAuction(
-            auction.amount
-        );
+        uint256 minAmount = _getMinBidAmountForReserveAuction(auction.amount);
         require(
             msg.value >= minAmount,
             "NFTMarketReserveAuction: Bid amount too low"
         );
-        
+
         // Cache and update bidder state before a possible reentrancy (via the value transfer)
         uint256 originalAmount = auction.amount;
         address payable originalBidder = auction.bidder;
         auction.amount = msg.value;
         auction.bidder = msg.sender;
-        
-        if(originalBidder != address(0)) {
+
+        if (originalBidder != address(0)) {
             // Refund the previous bidders
             _sendValueWithFallbackWithdrawWithLowGasLimit(
                 originalBidder,
                 originalAmount
             );
         }
-        
 
         emit ReserveAuctionBidPlaced(
             auctionId,
@@ -2094,8 +2093,6 @@ abstract contract NFTMarketReserveAuction is
             block.timestamp
         );
     }
-    
-    
 
     /**
      * @notice Once the countdown has expired for an auction, anyone can settle the auction.
@@ -2128,11 +2125,11 @@ abstract contract NFTMarketReserveAuction is
             uint256 creatorFee,
             uint256 ownerRev
         ) = _distributeFunds(
-            auction.nftContract,
-            auction.tokenId,
-            auction.seller,
-            auction.amount
-        );
+                auction.nftContract,
+                auction.tokenId,
+                auction.seller,
+                auction.amount
+            );
 
         emit ReserveAuctionFinalized(
             auctionId,

@@ -1,6 +1,6 @@
 /**
- *Submitted for verification at polygonscan.com on 2021-10-22
- */
+ *Submitted for verification at polygonscan.com on 2021-10-20
+*/
 
 // Sources flattened with hardhat v2.4.1 https://hardhat.org
 
@@ -951,10 +951,11 @@ abstract contract SendValueWithFallbackWithdraw is ReentrancyGuardUpgradeable {
      * which is enough to send to contracts as well.
      */
     function _sendValueWithFallbackWithdrawWithLowGasLimit(
+        address mode,
         address payable user,
         uint256 amount
     ) internal {
-        _sendValueWithFallbackWithdraw(user, amount, 20000);
+        _sendValueWithFallbackWithdraw(mode, user, amount, 20000);
     }
 
     /**
@@ -962,16 +963,18 @@ abstract contract SendValueWithFallbackWithdraw is ReentrancyGuardUpgradeable {
      * which is enough for a 5-way split.
      */
     function _sendValueWithFallbackWithdrawWithMediumGasLimit(
+        address paymentMode,
         address payable user,
         uint256 amount
     ) internal {
-        _sendValueWithFallbackWithdraw(user, amount, 210000);
+        _sendValueWithFallbackWithdraw(paymentMode, user, amount, 210000);
     }
 
     /**
      * @dev Attempt to send a user or contract ETH and if it fails store the amount owned for later withdrawal.
      */
     function _sendValueWithFallbackWithdraw(
+        address mode,
         address payable user,
         uint256 amount,
         uint256 gasLimit
@@ -979,15 +982,20 @@ abstract contract SendValueWithFallbackWithdraw is ReentrancyGuardUpgradeable {
         if (amount == 0) {
             return;
         }
-        // Cap the gas to prevent consuming all available gas to block a tx from completing successfully
-        // solhint-disable-next-line avoid-low-level-calls
-        (bool success, ) = user.call{value: amount, gas: gasLimit}("");
-        if (!success) {
-            // Record failed sends for a withdrawal later
-            // Transfers could fail if sent to a multisig with non-trivial receiver logic
-            // solhint-disable-next-line reentrancy
-            pendingWithdrawals[user] = pendingWithdrawals[user].add(amount);
-            emit WithdrawPending(user, amount);
+        if(mode == address(0)) { 
+            // Cap the gas to prevent consuming all available gas to block a tx from completing successfully
+            // solhint-disable-next-line avoid-low-level-calls
+            (bool success, ) = user.call{value: amount, gas: gasLimit}("");
+            if (!success) {
+                // Record failed sends for a withdrawal later
+                // Transfers could fail if sent to a multisig with non-trivial receiver logic
+                // solhint-disable-next-line reentrancy
+                pendingWithdrawals[user] = pendingWithdrawals[user].add(amount);
+                emit WithdrawPending(user, amount);
+            }
+        }
+        else {
+            require(IERC20(mode).transfer(user,amount));
         }
     }
 
@@ -1243,6 +1251,7 @@ abstract contract NFTMarketFees is
      * @dev Distributes funds to foundation, creator, and NFT owner after a sale.
      */
     function _distributeFunds(
+        address mode,
         address nftContract,
         uint256 tokenId,
         address payable seller,
@@ -1271,14 +1280,16 @@ abstract contract NFTMarketFees is
         nftContractToTokenIdToFirstSaleCompleted[nftContract][tokenId] = true;
 
         _sendValueWithFallbackWithdrawWithLowGasLimit(
+            mode,
             getFoundationTreasury(),
             foundationFee
         );
         _sendValueWithFallbackWithdrawWithMediumGasLimit(
+            mode,
             creatorFeeTo,
             creatorFee
         );
-        _sendValueWithFallbackWithdrawWithMediumGasLimit(ownerRevTo, ownerRev);
+        _sendValueWithFallbackWithdrawWithMediumGasLimit(mode, ownerRevTo, ownerRev);
     }
 
     /**
@@ -1467,7 +1478,8 @@ library Address {
         // for accounts without code, i.e. `keccak256('')`
         bytes32 codehash;
 
-        bytes32 accountHash = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
+            bytes32 accountHash
+         = 0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470;
         // solhint-disable-next-line no-inline-assembly
         assembly {
             codehash := extcodehash(account)
@@ -1647,7 +1659,7 @@ library Strings {
         uint256 index = digits - 1;
         temp = value;
         while (temp != 0) {
-            buffer[index--] = bytes1(uint8(48 + (temp % 10)));
+            buffer[index--] = byte(uint8(48 + (temp % 10)));
             temp /= 10;
         }
         return string(buffer);
@@ -1769,6 +1781,28 @@ abstract contract AccountMigration is FoundationOperatorRole {
     }
 }
 
+/**
+ * @title ERC20 interface
+ * @dev see https://github.com/ethereum/EIPs/issues/20
+ */
+interface IERC20 {
+    function transfer(address to, uint256 value) external returns (bool);
+
+    function approve(address spender, uint256 value) external returns (bool);
+
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+
+    function totalSupply() external view returns (uint256);
+
+    function balanceOf(address who) external view returns (uint256);
+
+    function allowance(address owner, address spender) external view returns (uint256);
+
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
 // File contracts/mixins/NFTMarketReserveAuction.sol
 
 pragma solidity 0.7.6;
@@ -1798,6 +1832,7 @@ abstract contract NFTMarketReserveAuction is
         uint256 endTime;
         address payable bidder;
         uint256 amount;
+        address paymentMode;
     }
 
     mapping(address => mapping(uint256 => uint256))
@@ -1811,7 +1846,7 @@ abstract contract NFTMarketReserveAuction is
 
     // These variables were used in an older version of the contract, left here as gaps to ensure upgrade compatibility
     uint256 private ______gap_was_goLiveDate;
-
+    
     uint256 private EXTENSION_DURATION = 1 days;
 
     event ReserveAuctionConfigUpdated(
@@ -1902,7 +1937,8 @@ abstract contract NFTMarketReserveAuction is
     {
         address payable seller = auctionIdToAuction[
             nftContractToTokenIdToAuctionId[nftContract][tokenId]
-        ].seller;
+        ]
+        .seller;
         if (seller == address(0)) {
             return super._getSellerFor(nftContract, tokenId);
         }
@@ -1955,26 +1991,24 @@ abstract contract NFTMarketReserveAuction is
         address nftContract,
         uint256 tokenId,
         uint256 reservePrice,
-        uint256 startDate,
-        uint256 endDate
+        uint256 stateDate,
+        uint256 endDate,
+        address paymentMode
     ) public onlyValidAuctionConfig(reservePrice) nonReentrant {
         // If an auction is already in progress then the NFT would be in escrow and the modifier would have failed
         uint256 extraTimeForExecution = 10 minutes;
-        require(
-            startDate + extraTimeForExecution > block.timestamp &&
-                endDate > startDate + EXTENSION_DURATION,
-            "NFTMarketReserveAuction: endDate must be > stateDate + 24 hours "
-        );
+        require(stateDate - extraTimeForExecution > block.timestamp && endDate > stateDate + EXTENSION_DURATION, "NFTMarketReserveAuction: endDate must be > stateDate + 24 hours ");
         uint256 auctionId = _getNextAndIncrementAuctionId();
         nftContractToTokenIdToAuctionId[nftContract][tokenId] = auctionId;
         auctionIdToAuction[auctionId] = ReserveAuction(
             nftContract,
             tokenId,
             msg.sender,
-            startDate,
+            stateDate,
             endDate, // endTime is only known once the reserve price is met
             address(0), // bidder is only known once a bid has been placed
-            reservePrice
+            reservePrice,
+            paymentMode
         );
 
         IERC721Upgradeable(nftContract).transferFrom(
@@ -2050,49 +2084,55 @@ abstract contract NFTMarketReserveAuction is
      * If there is already an outstanding bid, the previous bidder will be refunded at this time
      * and if the bid is placed in the final moments of the auction, the countdown may be extended.
      */
-    function placeBid(uint256 auctionId) public payable nonReentrant {
+    function placeBid(uint256 amount, uint256 auctionId) public payable nonReentrant {
         ReserveAuction storage auction = auctionIdToAuction[auctionId];
         require(
             auction.amount != 0,
             "NFTMarketReserveAuction: Auction not found"
         );
         require(
-            auction.startTime <= block.timestamp &&
-                auction.endTime >= block.timestamp,
-            "NFTMarketReserveAuction: Auction not found"
+            auction.startTime <= block.timestamp && auction.endTime >= block.timestamp,
+            "NFTMarketReserveAuction: Auction not started / ended"
         );
 
-        // require(
-        //     auction.bidder != msg.sender,
-        //     "NFTMarketReserveAuction: You already have an outstanding bid"
-        // );
-        uint256 minAmount = _getMinBidAmountForReserveAuction(auction.amount);
+        uint256 minAmount = _getMinBidAmountForReserveAuction(
+            auction.amount
+        );
+        if(auction.paymentMode == address(0)){
+            amount = msg.value;
+        }
         require(
-            msg.value >= minAmount,
+            amount >= minAmount,
             "NFTMarketReserveAuction: Bid amount too low"
         );
-
+        
         // Cache and update bidder state before a possible reentrancy (via the value transfer)
         uint256 originalAmount = auction.amount;
         address payable originalBidder = auction.bidder;
-        auction.amount = msg.value;
+        if(auction.paymentMode != address(0)){
+            IERC20(auction.paymentMode).transferFrom(msg.sender, address(this), amount);
+        }
+        auction.amount = amount;
         auction.bidder = msg.sender;
-
-        if (originalBidder != address(0)) {
+        
+        if(originalBidder != address(0)) {
             // Refund the previous bidders
             _sendValueWithFallbackWithdrawWithLowGasLimit(
+                auction.paymentMode,
                 originalBidder,
                 originalAmount
             );
-        }
+        } 
 
         emit ReserveAuctionBidPlaced(
             auctionId,
             msg.sender,
-            msg.value,
+            amount,
             block.timestamp
         );
     }
+    
+    
 
     /**
      * @notice Once the countdown has expired for an auction, anyone can settle the auction.
@@ -2125,11 +2165,12 @@ abstract contract NFTMarketReserveAuction is
             uint256 creatorFee,
             uint256 ownerRev
         ) = _distributeFunds(
-                auction.nftContract,
-                auction.tokenId,
-                auction.seller,
-                auction.amount
-            );
+            auction.paymentMode,
+            auction.nftContract,
+            auction.tokenId,
+            auction.seller,
+            auction.amount
+        );
 
         emit ReserveAuctionFinalized(
             auctionId,
@@ -2197,6 +2238,7 @@ abstract contract NFTMarketReserveAuction is
         );
         if (auction.bidder != address(0)) {
             _sendValueWithFallbackWithdrawWithMediumGasLimit(
+                auction.paymentMode,
                 auction.bidder,
                 auction.amount
             );

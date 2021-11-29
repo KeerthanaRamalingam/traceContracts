@@ -1786,6 +1786,9 @@ abstract contract AccountMigration is FoundationOperatorRole {
  * @dev see https://github.com/ethereum/EIPs/issues/20
  */
 interface IERC20 {
+
+    function name() external returns (string memory);
+
     function transfer(address to, uint256 value) external returns (bool);
 
     function approve(address spender, uint256 value) external returns (bool);
@@ -1839,6 +1842,8 @@ abstract contract NFTMarketReserveAuction is
         private nftContractToTokenIdToAuctionId;
     mapping(uint256 => ReserveAuction) private auctionIdToAuction;
 
+    mapping(address => bool) public tokens;
+
     uint256 private _minPercentIncrementInBasisPoints;
 
     // This variable was used in an older version of the contract, left here as a gap to ensure upgrade compatibility
@@ -1862,7 +1867,9 @@ abstract contract NFTMarketReserveAuction is
         address indexed nftContract,
         uint256 indexed tokenId,
         uint256 reservePrice,
-        uint256 auctionId
+        uint256 auctionId,
+        address paymentMode,
+        string name
     );
     event ReserveAuctionUpdated(
         uint256 indexed auctionId,
@@ -1891,6 +1898,10 @@ abstract contract NFTMarketReserveAuction is
         uint256 indexed auctionId,
         address indexed originalSellerAddress,
         address indexed newSellerAddress
+    );
+    event TokenAdded(
+        address[] indexed tokenAddress,
+        bool[] indexed status
     );
 
     modifier onlyValidAuctionConfig(uint256 reservePrice) {
@@ -1995,6 +2006,7 @@ abstract contract NFTMarketReserveAuction is
         uint256 endDate,
         address paymentMode
     ) public onlyValidAuctionConfig(reservePrice) nonReentrant {
+        require(!tokens[paymentMode], "Token not supported");
         // If an auction is already in progress then the NFT would be in escrow and the modifier would have failed
         uint256 extraTimeForExecution = 10 minutes;
         require(stateDate - extraTimeForExecution > block.timestamp && endDate > stateDate + EXTENSION_DURATION, "NFTMarketReserveAuction: endDate must be > stateDate + 24 hours ");
@@ -2022,7 +2034,9 @@ abstract contract NFTMarketReserveAuction is
             nftContract,
             tokenId,
             reservePrice,
-            auctionId
+            auctionId,
+            paymentMode,
+            IERC20(paymentMode).name()
         );
     }
 
@@ -2130,8 +2144,7 @@ abstract contract NFTMarketReserveAuction is
             amount,
             block.timestamp
         );
-    }
-    
+    } 
     
 
     /**
@@ -2206,6 +2219,19 @@ abstract contract NFTMarketReserveAuction is
             return currentBidAmount.add(1);
         }
         return minIncrement.add(currentBidAmount);
+    }
+
+    /**
+     * @notice Allows Foundation to add token address.
+     */
+    function adminAddToken(
+        address[] memory tokenAddress,
+        bool[] memory status
+    ) public onlyFoundationAdmin {
+        for(uint160 i; i < tokenAddress.length; i++) {
+            tokens[tokenAddress[i]] = status[i];
+        }
+        emit TokenAdded(tokenAddress, status);
     }
 
     /**

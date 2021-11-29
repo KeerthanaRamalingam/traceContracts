@@ -2009,7 +2009,7 @@ abstract contract NFTMarketReserveAuction is
         require(tokens[paymentMode], "Token not supported");
         // If an auction is already in progress then the NFT would be in escrow and the modifier would have failed
         uint256 extraTimeForExecution = 10 minutes;
-        require(stateDate - extraTimeForExecution > block.timestamp && endDate > stateDate + EXTENSION_DURATION, "NFTMarketReserveAuction: endDate must be > stateDate + 24 hours ");
+        require(stateDate + extraTimeForExecution > block.timestamp && endDate > stateDate + EXTENSION_DURATION, "NFTMarketReserveAuction: endDate must be > stateDate + 24 hours ");
         uint256 auctionId = _getNextAndIncrementAuctionId();
         nftContractToTokenIdToAuctionId[nftContract][tokenId] = auctionId;
         auctionIdToAuction[auctionId] = ReserveAuction(
@@ -2029,15 +2029,27 @@ abstract contract NFTMarketReserveAuction is
             tokenId
         );
 
-        emit ReserveAuctionCreated(
-            msg.sender,
-            nftContract,
-            tokenId,
-            reservePrice,
-            auctionId,
-            paymentMode,
-            IERC20(paymentMode).name()
-        );
+        if(paymentMode == address(0))
+            emit ReserveAuctionCreated(
+                msg.sender,
+                nftContract,
+                tokenId,
+                reservePrice,
+                auctionId,
+                paymentMode,
+                "MATIC"
+            );
+        else 
+            emit ReserveAuctionCreated(
+                msg.sender,
+                nftContract,
+                tokenId,
+                reservePrice,
+                auctionId,
+                paymentMode,
+                IERC20(paymentMode).name()
+            );
+
     }
 
     /**

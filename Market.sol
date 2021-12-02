@@ -2020,7 +2020,7 @@ abstract contract NFTMarketReserveAuction is
         require(
             stateDate + extraTimeForExecution > block.timestamp &&
                 endDate > stateDate + EXTENSION_DURATION,
-            "NFTMarketReserveAuction: endDate must be > stateDate + 24 hours "
+            "NFTMarketReserveAuction: endDate must be > stateDate + auction duration "
         );
         uint256 auctionId = _getNextAndIncrementAuctionId();
         nftContractToTokenIdToAuctionId[nftContract][tokenId] = auctionId;
@@ -2229,6 +2229,9 @@ abstract contract NFTMarketReserveAuction is
      */
     function getMinBidAmount(uint256 auctionId) public view returns (uint256) {
         ReserveAuction storage auction = auctionIdToAuction[auctionId];
+        if (auction.endTime >= block.timestamp) {
+            return auction.amount;
+        }
         return _getMinBidAmountForReserveAuction(auction.amount);
     }
 

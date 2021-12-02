@@ -69,12 +69,22 @@ contract Bling_Master {
     }
 
     /**
+     * @dev Modifier to protect an initializer function from being invoked twice.
+     */
+    modifier onlyOwner() {
+        require((admin == msg.sender), "NFT721Mint: Address Not Authorized");
+        _;
+    }
+
+    /**
      * @notice Allows foundation admin to whitelist users
      */
-    function addWhitelist(address[] memory brands) public {
-        require(admin == msg.sender);
+    function addWhitelist(address[] memory brands, bool[] memory status)
+        public
+        onlyOwner
+    {
         for (uint256 i; i < brands.length; i++) {
-            whitelisted[brands[i]] = true;
+            whitelisted[brands[i]] = status[i];
         }
     }
 
@@ -184,5 +194,18 @@ contract Bling_Master {
             collection.properties,
             collection.quantity
         );
+    }
+
+    function updateAdminConfig(
+        address _colContract,
+        string memory _colCode,
+        address _nftMarket,
+        string memory baseURI
+    ) public onlyOwner {
+        require(
+            getCollection[msg.sender][_colCode] == _colContract,
+            "Bling_Master: COLLECTION_NOT_EXISTS"
+        );
+        Bling_Collection(_colContract).adminUpdateConfig(_nftMarket, baseURI);
     }
 }
